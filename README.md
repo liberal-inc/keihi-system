@@ -1,36 +1,217 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 社員経費管理システム
 
-## Getting Started
+複数事業を運営する中小企業向けの社内経費管理 Web アプリケーション。
+社員が通勤費・小物購入費を Web から申請し、日報を記録・提出できる。
 
-First, run the development server:
+## 技術スタック
+
+| 領域 | 採用技術 |
+| --- | --- |
+| フレームワーク | Next.js 16 (App Router) / TypeScript |
+| UI | Tailwind CSS v4 + shadcn/ui ベースのコンポーネント |
+| フォント | Cormorant Garamond（見出し・ロゴ）/ Noto Serif JP + Inter（本文・UI） |
+| DB | MySQL（Prisma ORM + MariaDB ドライバアダプタ） |
+| 認証 | ログイン名（お名前）の入力のみ / JWT セッション Cookie |
+| リッチテキスト | Tiptap |
+| PDF 生成 | pdfkit（Noto Sans JP を埋め込みサブセット化） |
+| ファイルストレージ | Cloudflare R2（S3互換）／未設定時はローカルにフォールバック |
+
+## セットアップ
+
+### 1. 依存関係
+
+```bash
+npm install
+```
+
+### 2. 環境変数
+
+`.env` を編集する。ローカル確認用の既定値は入っている。
+
+| 変数 | 用途 |
+| --- | --- |
+| `DATABASE_URL` | MySQL 接続文字列。TiDB Cloud に切り替える場合はここを差し替える |
+| `AUTH_SECRET` | セッション JWT の署名鍵。**本番では必ず差し替える** |
+| `R2_ACCOUNT_ID` ほか | Cloudflare R2 の認証情報。未設定なら `./.storage` に保存される |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | 任意。未設定なら通勤経路は住所テキスト＋距離の手動入力のみ |
+
+### 3. ローカル MySQL
+
+```bash
+brew services start mysql
+```
+
+```bash
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS keihi_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+### 4. マイグレーションとシード
+
+```bash
+npx prisma migrate dev && npx prisma db seed
+```
+
+### 5. 起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+http://localhost:3000 を開く。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## ログイン方法
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**ログイン画面で「お名前」を入力するだけ**でログインできる。パスワードはない。
 
-## Learn More
+シードで投入される初期アカウント:
 
-To learn more about Next.js, take a look at the following resources:
+| ロール | ログイン時に入力する名前 | 部署 |
+| --- | --- | --- |
+| owner（オーナー） | `志村` | 経営管理部 |
+| user（社員） | `齋藤` | 営業部 |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- 入力時の空白（半角・全角）は自動で除去されるため、`　齋藤 ` でもログインできる
+- 社員の追加・変更は「社員管理」画面（admin・owner のみ）から行う
+- 社員の自己登録機能は持たない
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+> ### ⚠️ セキュリティ上の注意
+>
+> パスワードが無いため、**URL を知っている人は誰でも `志村` と入力すればオーナーとして
+> 全社員の経費データにアクセスできる**。公開 URL で運用する場合、この点は
+> 承知のうえで利用すること。保護を強めたい場合の選択肢:
+>
+> - サイト共通の合言葉を 1 回だけ入力させる仕組みを追加する
+> - 社内の固定 IP からのみアクセスを許可する
+> - ログイン名を推測されにくい値（フルネームや社員番号との組み合わせ）にする
 
-## Deploy on Vercel
+## 実装済みの機能
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 認証・権限
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- ログイン名（お名前）の入力のみでログイン、JWT セッション Cookie（7日）
+- 4段階ロール（owner / admin / manager / user）に応じたメニュー出し分け
+- 未ログイン時は `/login` へリダイレクト
+
+### 社員管理（`/admin/users`、admin・owner）
+
+- 社員の追加・編集・削除、部署のその場追加
+- ログイン名・氏名・社員番号・メールアドレス・部署・ロール・有効/無効の設定
+- 氏名を入力するとログイン名に姓が自動補完される
+- ロールの変更はオーナーのみ（仕様書「ロール変更はオーナーのみ」）
+- 最後のオーナーを降格・無効化・削除できないようガードしている
+- 自分自身は削除できない
+
+### 経費申請（`/expenses/new`）
+
+月を選択して申請する 3 タブ構成。同じ月に何度でも追加提出できる（件数上限なし）。
+
+- **通勤費タブ**
+  - 通勤経路の登録・編集・削除（経路名／出発地／到着地／交通手段）
+  - 公共交通：1日あたりの金額（往復合計）を入力
+  - 車：片道距離(km) を入力 → `片道距離 × 2 × 単価(円/km)` で自動計算
+  - 国税庁の非課税限度額（距離別の月額上限）を自動表示し、超過時に警告
+  - カレンダーで出勤日を複数選択。**申請済みの日付は選択不可**（重複自動除外）
+- **小物（自由入力）タブ**
+  - 品物名・金額を自由入力、領収書画像（JPEG/PNG/WebP、8MB まで）を添付
+  - 登録済み品目の編集・削除
+- **小物（カテゴリ一覧）タブ**
+  - 管理者が設定したカテゴリから品目と数量を選んで申請
+  - 明細はカテゴリ内容のスナップショットを保持（後からカテゴリを変更しても明細は不変）
+
+### 申請履歴（`/expenses`）
+
+- 過去の申請一覧、明細（通勤費／カテゴリ小物／自由入力）の展開表示
+- 個別エントリの削除、申請全体の削除、領収書画像の表示
+
+### 日報（`/reports`, `/reports/new`）
+
+- 対象日／業務内容（リッチテキスト、必須）／振り返り／翌日の予定
+- 下書き保存 → 後から提出の 2 段階ステータス
+- 月別フィルタ付き一覧。マネージャーは「担当部署の日報」に切り替えて閲覧可能
+- 提出済み日報へのコメント投稿（manager / admin / owner）、投稿者本人のみ削除可能
+
+### PDF 出力
+
+- 申請 1 件ごとの PDF ダウンロード（`/api/expenses/{id}/pdf`）
+  - 氏名・社員番号・部署・対象月・提出日・ステータス
+  - 通勤費明細（日付・経路名・金額、小計）
+  - 小物購入費明細（品目名・数量・金額、小計）
+  - 自由入力品目明細（品目名・領収書有無・金額、小計）
+  - 合計金額
+  - 領収書画像がある品目は 1 枚ずつ別ページに添付
+- 月次の全件一括 PDF（`/api/expenses/pdf?month=YYYY-MM`、管理者・オーナーのみ）
+- 出力箇所：申請履歴（自分の申請）／月次経費一覧（管理者）
+
+日本語は Noto Sans JP を PDF に埋め込む。pdfkit が自動でサブセット化するため、
+フォント自体は 9.5MB あるが生成される PDF は 1 件あたり 20KB 程度に収まる。
+
+### 月次経費一覧（`/admin/monthly`、admin・owner）
+
+- 月を選択して対象社員の申請一覧・件数・合計金額を確認
+- 各申請の個別 PDF 出力、および全件一括 PDF 出力
+
+### ダッシュボード（`/dashboard`）
+
+- 今月の申請額・提出件数、今年の合計金額、申請回数、日報の下書き件数
+- 最近の申請・最近の日報
+
+### レイアウト
+
+- 左サイドバー固定のダッシュボードレイアウト
+- アイコンのみ表示への折りたたみ、ドラッグによる幅変更（180〜400px）
+- 状態は localStorage に保存され、次回アクセス時に復元される
+
+## デプロイ
+
+Railway へのデプロイ手順は [DEPLOY.md](./DEPLOY.md) を参照。
+
+本番で必ず設定すること:
+
+- `AUTH_SECRET` を `openssl rand -base64 32` で生成した値に差し替える
+- URL を社内限りにする（パスワードが無いため、URL の管理がそのまま
+  アクセス管理になる）
+- **Cloudflare R2 を設定する**（コンテナのファイルシステムは揮発性のため、
+  未設定だと再デプロイのたびに領収書が消える。未設定時はアップロードを
+  エラーで止めるようにしてある）
+
+## 未実装（次フェーズ）
+
+サイドバーで「準備中」と表示されている画面。DB スキーマ側は対応済みで、UI と Server Action の追加のみで実装できる。
+
+- 管理ダッシュボード（`/admin`）
+- 通勤経路設定（`/admin/routes`）— 管理者が全社員の経路を管理する画面
+- 小物カテゴリ設定（`/admin/categories`）— 現状はシードでのみ登録
+- 部署管理（`/admin/departments`）— 部署の追加は社員管理画面から可能
+- ロール管理（`/admin/roles`）— ロール変更は社員管理画面から可能
+- システム設定（`/admin/settings`）— 円/km 単価。現状はシードで 15 円/km
+- Google マップ連携（ピン指定・距離の自動計算）
+
+## 主要なファイル
+
+| パス | 内容 |
+| --- | --- |
+| `prisma/schema.prisma` | 全テーブル定義（管理者機能・PDF 出力まで見据えたフルセット） |
+| `prisma/seed.ts` | 初期ユーザー・部署・小物カテゴリ・システム設定 |
+| `src/app/(auth)/login/actions.ts` | ログイン名だけの認証処理 |
+| `src/app/(app)/admin/users/` | 社員管理画面 |
+| `src/lib/pdf/expense-pdf.ts` | 経費申請 PDF の帳票生成 |
+| `src/lib/auth.ts` | セッション発行・検証、ロールガード |
+| `src/lib/commute.ts` | 交通費計算と国税庁の非課税限度額テーブル |
+| `src/lib/storage.ts` | 領収書の保存（R2／ローカルフォールバック） |
+| `src/app/(app)/expenses/actions.ts` | 経費申請の Server Action |
+| `src/app/(app)/reports/actions.ts` | 日報の Server Action |
+
+## 設計上の判断
+
+- **通勤日の重複排除**：`CommuteEntry` に `@@unique([routeId, date])` を張り、DB レベルで同一経路・同一日の二重申請を防いでいる。アプリ側でも申請前に既存日付を除外する。
+- **明細のスナップショット**：小物カテゴリの品目名・単価・単位、通勤経路の経路名は申請時点の値を明細に複製する。マスタを後から編集・削除しても過去の申請額は変わらない。
+- **金額は整数（円）で保持**：浮動小数点による誤差を避ける。
+- **リッチテキストのサニタイズ**：日報の HTML は保存前に `sanitize-html` で許可タグのみに絞る。
+- **PDF の日本語フォント**：Noto Sans JP を `src/assets/fonts/` に同梱し、pdfkit のサブセット化に任せる。外部フォント API に依存しないため、オフライン環境でも生成できる。
+
+### 要確認の解釈
+
+仕様書の「管理者は**自分が担当する部署**の社員の申請を操作・削除可能」について、
+担当部署の割り当て方法が定義されていないため、**「管理者自身が所属する部署」＝担当部署**として実装している
+（`src/lib/expense-access.ts`）。1 人の管理者が複数部署を担当する運用が必要な場合は、
+管理者と部署の対応表（多対多）を追加する必要がある。

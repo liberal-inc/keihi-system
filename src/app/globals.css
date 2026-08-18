@@ -1,26 +1,165 @@
 @import "tailwindcss";
 
+/*
+ * 社員経費管理システム — カラーテーマ
+ * 仕様: ライトモード固定 / ウォームベージュ系 / 背景オフホワイト / プライマリはダークブラウン
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 42 38% 97%; /* オフホワイト（わずかに温かみ） */
+  --foreground: 25 30% 15%; /* 濃いブラウン系テキスト */
+
+  --card: 40 40% 99%;
+  --card-foreground: 25 30% 15%;
+
+  --popover: 40 40% 99%;
+  --popover-foreground: 25 30% 15%;
+
+  --primary: 25 38% 22%; /* ダークブラウン */
+  --primary-foreground: 42 45% 97%;
+
+  --secondary: 38 30% 92%; /* ウォームベージュ */
+  --secondary-foreground: 25 32% 24%;
+
+  --muted: 38 26% 93%;
+  --muted-foreground: 28 14% 42%;
+
+  --accent: 34 42% 88%;
+  --accent-foreground: 25 34% 22%;
+
+  --destructive: 4 62% 44%;
+  --destructive-foreground: 42 45% 97%;
+
+  --success: 145 40% 30%;
+  --warning: 34 70% 42%;
+
+  --border: 36 22% 85%;
+  --input: 36 22% 85%;
+  --ring: 25 38% 32%;
+
+  --sidebar: 36 30% 94%;
+  --sidebar-foreground: 25 30% 18%;
+  --sidebar-border: 34 20% 84%;
+  --sidebar-accent: 34 38% 88%;
+
+  --radius: 0.5rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+
+  --font-sans: var(--font-noto-serif-jp), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), var(--font-noto-serif-jp), ui-serif, serif;
+  --font-ui: var(--font-inter), var(--font-noto-serif-jp), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* 見出し・ロゴはセリフ体（Cormorant Garamond） */
+.font-display {
+  font-family: var(--font-serif);
+  letter-spacing: 0.01em;
+}
+
+/* 数値・ラベルなど UI 要素は Inter */
+.font-ui {
+  font-family: var(--font-ui);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out;
+}
+
+/* リッチテキスト（日報本文）の表示 */
+.rich-text :where(p) {
+  margin-block: 0.4em;
+}
+.rich-text :where(ul) {
+  list-style: disc;
+  padding-inline-start: 1.4em;
+  margin-block: 0.4em;
+}
+.rich-text :where(ol) {
+  list-style: decimal;
+  padding-inline-start: 1.4em;
+  margin-block: 0.4em;
+}
+.rich-text :where(h1) {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-block: 0.6em 0.3em;
+}
+.rich-text :where(h2) {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-block: 0.6em 0.3em;
+}
+.rich-text :where(blockquote) {
+  border-inline-start: 3px solid hsl(var(--border));
+  padding-inline-start: 0.8em;
+  color: hsl(var(--muted-foreground));
+}
+.rich-text :where(code) {
+  background: hsl(var(--muted));
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* Tiptap プレースホルダ */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: hsl(var(--muted-foreground));
 }

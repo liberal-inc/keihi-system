@@ -1,0 +1,252 @@
+// 社員経費管理システム — データモデル
+// 仕様書: 社員経費管理システム_仕様書.pdf
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// 4段階のロール
+enum Role {
+  owner
+  admin
+  manager
+  user
+}
+
+/// 交通手段
+enum TransportType {
+  public_transit // 公共交通
+  car            // 車
+}
+
+/// 申請・日報の共通ステータス
+enum SubmissionStatus {
+  draft     // 下書き
+  submitted // 提出済み
+}
+
+model User {
+  id String @id @default(cuid())
+
+  /// ログイン時に入力する名前（例: 志村）。これだけでログインできる
+  loginName String @unique
+
+  /// 画面表示用の氏名
+  name String
+
+  /// 連絡用。ログインには使わない
+  email      String? @unique
+  employeeNo String? @unique
+  role         Role    @default(user)
+  departmentId String?
+  isActive     Boolean @default(true)
+
+  department        Department?         @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  managedDepartment Department?         @relation("DepartmentManager")
+  routes            CommuteRoute[]
+  applications      ExpenseApplication[]
+  dailyReports      DailyReport[]
+  reportComments    ReportComment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([departmentId])
+}
+
+model Department {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  managerId String? @unique
+
+  manager User?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members User[] @relation("DepartmentMembers")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// 通勤経路（社員ごとに登録）
+model CommuteRoute {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String        // 経路名
+  originName    String        // 出発地（住所・建物名・駅名）
+  originLat     Float?
+  originLng     Float?
+  destName      String        // 到着地
+  destLat       Float?
+  destLng       Float?
+  transportType TransportType
+
+  /// 公共交通: 1日あたりの金額（往復合計）
+  dailyFare Int?
+  /// 車: 片道距離(km)
+  distanceKm Float?
+
+  isActive Boolean @default(true)
+
+  entries CommuteEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+/// 月次の経費申請。同じ月に何度でも追加提出できる（上限なし）
+model ExpenseApplication {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// 対象月（当月1日 00:00 で保持）
+  targetMonth DateTime
+  status      SubmissionStatus @default(draft)
+  submittedAt DateTime?
+
+  commuteEntries  CommuteEntry[]
+  itemEntries     ItemEntry[]
+  freeItemEntries FreeItemEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, targetMonth])
+}
+
+/// 通勤費エントリ（経路 × 出勤日）
+model CommuteEntry {
+  id            String             @id @default(cuid())
+  applicationId String
+  application   ExpenseApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  routeId String
+  route   CommuteRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  /// 出勤日
+  date DateTime
+  /// 申請時点の金額（スナップショット）
+  amount Int
+  /// 申請時点の経路名（スナップショット）
+  routeNameSnapshot String
+
+  createdAt DateTime @default(now())
+
+  /// 同じ経路・同じ日は一度しか申請できない（仕様: 重複日付は自動除外）
+  @@unique([routeId, date])
+  @@index([applicationId])
+}
+
+/// 管理者が設定する小物カテゴリ
+model ItemCategory {
+  id       String  @id @default(cuid())
+  name     String  // 品目名
+  unitCost Int     // 単価
+  unit     String  @default("個") // 単位
+  isActive Boolean @default(true)
+
+  entries ItemEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// 小物（カテゴリ一覧）から選択した申請エントリ
+model ItemEntry {
+  id            String             @id @default(cuid())
+  applicationId String
+  application   ExpenseApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  categoryId String?
+  category   ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  /// スナップショット（カテゴリが後から編集・削除されても明細は不変）
+  nameSnapshot     String
+  unitCostSnapshot Int
+  unitSnapshot     String
+  quantity         Int
+  amount           Int
+
+  createdAt DateTime @default(now())
+
+  @@index([applicationId])
+  @@index([categoryId])
+}
+
+/// 小物（自由入力）の申請エントリ
+model FreeItemEntry {
+  id            String             @id @default(cuid())
+  applicationId String
+  application   ExpenseApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  name   String // 品物名
+  amount Int    // 金額
+
+  /// 領収書画像（R2 オブジェクトキー）
+  receiptKey      String?
+  receiptMimeType String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicationId])
+}
+
+/// 日報
+model DailyReport {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// 対象日
+  reportDate DateTime
+  /// 業務内容（リッチテキスト HTML、必須）
+  content String @db.Text
+  /// 振り返り（任意）
+  reflection String? @db.Text
+  /// 翌日の予定（任意）
+  nextPlan String? @db.Text
+
+  status      SubmissionStatus @default(draft)
+  submittedAt DateTime?
+
+  comments ReportComment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, reportDate])
+  @@index([userId, reportDate])
+}
+
+/// 日報コメント（マネージャー・管理者・オーナーが投稿）
+model ReportComment {
+  id       String      @id @default(cuid())
+  reportId String
+  report   DailyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  body String @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([reportId])
+  @@index([authorId])
+}
+
+/// システム設定（キー・バリュー）
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
