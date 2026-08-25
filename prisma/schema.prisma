@@ -33,7 +33,7 @@ enum SubmissionStatus {
 model User {
   id String @id @default(cuid())
 
-  /// ログイン時に入力する名前（例: 志村）。これだけでログインできる
+  /// ログイン時に入力する名前。これだけでログインできる
   loginName String @unique
 
   /// 画面表示用の氏名

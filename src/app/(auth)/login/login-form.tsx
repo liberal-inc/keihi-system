@@ -37,7 +37,7 @@ export function LoginForm() {
               autoComplete="username"
               autoFocus
               required
-              placeholder="例: 齋藤"
+              placeholder="お名前"
               className="text-lg"
             />
             <p className="text-xs text-muted-foreground font-ui">

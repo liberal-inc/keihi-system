@@ -13,20 +13,28 @@ const prisma = new PrismaClient({
  * ログインは loginName（お名前）の入力のみで行う。
  * 社員の追加・変更は管理画面「社員管理」からも実行できる。
  */
+/**
+ * 初期アカウントは環境変数で指定する。
+ * ソースに実名を残さないため、既定値はプレースホルダにしてある。
+ *
+ *   SEED_OWNER_NAME=... SEED_USER_NAME=... npx prisma db seed
+ *
+ * ローカルでは .env に書いておけばよい（.env は git 管理外）。
+ */
 const USERS = [
   {
-    loginName: "志村",
-    name: "志村",
+    loginName: process.env.SEED_OWNER_NAME || "owner",
+    name: process.env.SEED_OWNER_NAME || "owner",
     employeeNo: "0001",
     role: "owner" as const,
-    department: "経営管理部",
+    department: process.env.SEED_OWNER_DEPT || "経営管理部",
   },
   {
-    loginName: "齋藤",
-    name: "齋藤",
+    loginName: process.env.SEED_USER_NAME || "staff",
+    name: process.env.SEED_USER_NAME || "staff",
     employeeNo: "0002",
     role: "user" as const,
-    department: "営業部",
+    department: process.env.SEED_USER_DEPT || "営業部",
   },
 ];
 

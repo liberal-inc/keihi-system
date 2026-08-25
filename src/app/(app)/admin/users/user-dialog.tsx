@@ -171,7 +171,7 @@ export function UserDialog({
               <Input
                 id="u-name"
                 value={form.name}
-                placeholder="例: 齋藤 健一"
+                placeholder="例: 山田 太郎"
                 onChange={(e) => onNameChange(e.target.value)}
               />
             </div>
@@ -182,7 +182,7 @@ export function UserDialog({
               <Input
                 id="u-login"
                 value={form.loginName}
-                placeholder="例: 齋藤"
+                placeholder="例: 山田"
                 onChange={(e) =>
                   setForm((f) => ({ ...f, loginName: e.target.value }))
                 }
