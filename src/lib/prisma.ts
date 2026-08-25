@@ -34,12 +34,26 @@ function buildAdapter(rawUrl: string) {
   });
 }
 
-function createClient() {
+/**
+ * クライアントは初回アクセス時に作る。
+ * ビルド時（DATABASE_URL がまだ無い状態）に import されても落ちないようにするため、
+ * モジュール読み込み時点では接続を組み立てない。
+ */
+function getClient(): PrismaClient {
+  if (globalForPrisma.prisma) return globalForPrisma.prisma;
+
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL が設定されていません");
-  return new PrismaClient({ adapter: buildAdapter(url) });
+
+  const client = new PrismaClient({ adapter: buildAdapter(url) });
+  globalForPrisma.prisma = client;
+  return client;
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const client = getClient();
+    const value = Reflect.get(client, prop, client);
+    return typeof value === "function" ? value.bind(client) : value;
+  },
+});
