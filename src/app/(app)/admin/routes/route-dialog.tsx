@@ -214,6 +214,13 @@ export function AdminRouteDialog({
                 }
               />
               <p className="text-xs text-muted-foreground font-ui">
+                Googleマップなどで出発地から到着地を検索し、
+                <span className="font-medium text-foreground">
+                  表示された距離をそのまま入力
+                </span>
+                してください（小数第1位まで）。
+              </p>
+              <p className="text-xs text-muted-foreground font-ui">
                 交通費 = 片道距離 × 2（往復） × {ratePerKm} 円/km
               </p>
               {validKm && (
