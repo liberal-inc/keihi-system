@@ -8,9 +8,9 @@ import { prisma } from "@/lib/prisma";
 import { routeDailyFare } from "@/lib/commute";
 import { getRatePerKm } from "@/lib/settings";
 import {
-  ALLOWED_RECEIPT_TYPES,
   MAX_RECEIPT_BYTES,
   deleteReceipt,
+  isSupportedReceipt,
   putReceipt,
 } from "@/lib/storage";
 import { dateKeyToDate, monthKeyToDate } from "@/lib/utils";
@@ -24,9 +24,13 @@ const dateKeyRe = /^\d{4}-\d{2}-\d{2}$/;
 /** 領収書の保存に失敗したときの利用者向けメッセージ */
 function storageErrorMessage(e: unknown): string {
   console.error("領収書の保存に失敗しました", e);
-  return e instanceof Error && e.message.includes("Cloudflare R2")
-    ? e.message
-    : "領収書の保存に失敗しました。時間をおいて再度お試しください。";
+  if (
+    e instanceof Error &&
+    (e.message.includes("Cloudflare R2") || e.message.includes("読み込めませんでした"))
+  ) {
+    return e.message;
+  }
+  return "領収書の保存に失敗しました。時間をおいて再度お試しください。";
 }
 
 function revalidateExpenses() {
@@ -235,19 +239,25 @@ export async function submitFreeItemAction(
   let receiptMimeType: string | null = null;
 
   if (receipt instanceof File && receipt.size > 0) {
-    if (!ALLOWED_RECEIPT_TYPES.includes(receipt.type as never)) {
-      return { ok: false, error: "領収書は JPEG・PNG・WebP 形式のみ添付できます" };
-    }
     if (receipt.size > MAX_RECEIPT_BYTES) {
       return { ok: false, error: "領収書のサイズが大きすぎます（上限 8MB）" };
     }
     const bytes = Buffer.from(await receipt.arrayBuffer());
+    // iPhone は HEIC の MIME タイプを空で送ることがあるため、中身でも判定する
+    if (!isSupportedReceipt(bytes, receipt.type)) {
+      return {
+        ok: false,
+        error: "領収書は JPEG・PNG・WebP・HEIC 形式のみ添付できます",
+      };
+    }
     try {
-      receiptKey = await putReceipt(user.id, bytes, receipt.type);
+      // HEIC は保存時に JPEG へ変換されるため、実際の形式は戻り値から取る
+      const saved = await putReceipt(user.id, bytes, receipt.type);
+      receiptKey = saved.key;
+      receiptMimeType = saved.contentType;
     } catch (e) {
       return { ok: false, error: storageErrorMessage(e) };
     }
-    receiptMimeType = receipt.type;
   }
 
   const app = await getOrCreateDraft(user.id, monthKey);
@@ -288,19 +298,24 @@ export async function updateFreeItemAction(
   const data: Prisma.FreeItemEntryUpdateInput = { name, amount };
 
   if (receipt instanceof File && receipt.size > 0) {
-    if (!ALLOWED_RECEIPT_TYPES.includes(receipt.type as never)) {
-      return { ok: false, error: "領収書は JPEG・PNG・WebP 形式のみ添付できます" };
-    }
     if (receipt.size > MAX_RECEIPT_BYTES) {
       return { ok: false, error: "領収書のサイズが大きすぎます（上限 8MB）" };
     }
     const bytes = Buffer.from(await receipt.arrayBuffer());
+    // iPhone は HEIC の MIME タイプを空で送ることがあるため、中身でも判定する
+    if (!isSupportedReceipt(bytes, receipt.type)) {
+      return {
+        ok: false,
+        error: "領収書は JPEG・PNG・WebP・HEIC 形式のみ添付できます",
+      };
+    }
     try {
-      data.receiptKey = await putReceipt(user.id, bytes, receipt.type);
+      const saved = await putReceipt(user.id, bytes, receipt.type);
+      data.receiptKey = saved.key;
+      data.receiptMimeType = saved.contentType;
     } catch (e) {
       return { ok: false, error: storageErrorMessage(e) };
     }
-    data.receiptMimeType = receipt.type;
     if (entry.receiptKey) await deleteReceipt(entry.receiptKey);
   }
 

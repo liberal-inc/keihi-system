@@ -10,6 +10,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import heicConvert from "heic-convert";
 
 /**
  * 領収書画像の保存先。
@@ -17,11 +18,22 @@ import {
  * ./.storage 配下にフォールバックする（ローカル動作確認用）。
  */
 
+/**
+ * アップロードを受け付ける形式。
+ * HEIC は iPhone の標準形式だが、ブラウザで表示できず PDF にも埋め込めないため、
+ * 保存前に JPEG へ変換する（normalizeReceipt）。
+ */
 export const ALLOWED_RECEIPT_TYPES = [
   "image/jpeg",
   "image/png",
   "image/webp",
+  "image/heic",
+  "image/heif",
 ] as const;
+
+/** ファイル選択ダイアログに渡す accept 属性 */
+export const RECEIPT_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif";
 
 export const MAX_RECEIPT_BYTES = 8 * 1024 * 1024; // 8MB
 
@@ -74,15 +86,96 @@ function extFor(mimeType: string): string {
   return "jpg";
 }
 
-/** 領収書を保存し、オブジェクトキーを返す */
-export async function putReceipt(
-  userId: string,
+/**
+ * HEIC / HEIF かどうかをファイルの中身から判定する。
+ * iPhone からの送信では MIME タイプが空だったり application/octet-stream に
+ * なることがあるため、拡張子や申告値ではなく実データで見る。
+ *
+ * ISO base media 形式: [4byte size]["ftyp"][major brand]...
+ */
+function isHeicBuffer(bytes: Buffer): boolean {
+  if (bytes.length < 12) return false;
+  if (bytes.toString("ascii", 4, 8) !== "ftyp") return false;
+
+  const brand = bytes.toString("ascii", 8, 12);
+  return ["heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1"].includes(
+    brand,
+  );
+}
+
+/**
+ * 実データの先頭バイトから対応形式かどうかを判定する。
+ * iPhone から HEIC を送ると MIME タイプが空や application/octet-stream に
+ * なることがあるため、申告値だけで弾かないようにするために使う。
+ */
+export function isSupportedReceipt(bytes: Buffer, mimeType: string): boolean {
+  if (ALLOWED_RECEIPT_TYPES.includes(mimeType as never)) return true;
+  if (isHeicBuffer(bytes)) return true;
+
+  // JPEG: FF D8 FF
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return true;
+  }
+  // PNG: 89 50 4E 47
+  if (
+    bytes.length >= 4 &&
+    bytes[0] === 0x89 &&
+    bytes.toString("ascii", 1, 4) === "PNG"
+  ) {
+    return true;
+  }
+  // WebP: "RIFF"...."WEBP"
+  if (
+    bytes.length >= 12 &&
+    bytes.toString("ascii", 0, 4) === "RIFF" &&
+    bytes.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * 保存できる形式に整える。
+ * HEIC はブラウザで表示できず PDF にも埋め込めないため JPEG に変換する。
+ */
+async function normalizeReceipt(
   bytes: Buffer,
   mimeType: string,
-): Promise<string> {
+): Promise<{ bytes: Buffer; contentType: string }> {
+  const declaredHeic = mimeType === "image/heic" || mimeType === "image/heif";
+
+  if (!declaredHeic && !isHeicBuffer(bytes)) {
+    return { bytes, contentType: mimeType };
+  }
+
+  try {
+    const converted = await heicConvert({
+      buffer: new Uint8Array(bytes),
+      format: "JPEG",
+      quality: 0.85,
+    });
+    return { bytes: Buffer.from(converted), contentType: "image/jpeg" };
+  } catch (e) {
+    console.error("HEIC の変換に失敗しました", e);
+    throw new Error(
+      "この画像を読み込めませんでした。JPEG または PNG で保存し直してお試しください。",
+    );
+  }
+}
+
+/** 領収書を保存し、オブジェクトキーと保存後の形式を返す */
+export async function putReceipt(
+  userId: string,
+  rawBytes: Buffer,
+  rawMimeType: string,
+): Promise<{ key: string; contentType: string }> {
   assertStorageReady();
 
-  const key = `receipts/${userId}/${randomUUID()}.${extFor(mimeType)}`;
+  const { bytes, contentType } = await normalizeReceipt(rawBytes, rawMimeType);
+
+  const key = `receipts/${userId}/${randomUUID()}.${extFor(contentType)}`;
   const cfg = r2Config();
 
   if (cfg) {
@@ -91,16 +184,16 @@ export async function putReceipt(
         Bucket: cfg.bucket,
         Key: key,
         Body: bytes,
-        ContentType: mimeType,
+        ContentType: contentType,
       }),
     );
-    return key;
+    return { key, contentType };
   }
 
   const filePath = path.join(LOCAL_DIR, key);
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, bytes);
-  return key;
+  return { key, contentType };
 }
 
 /** 領収書を取得する（画像配信用） */

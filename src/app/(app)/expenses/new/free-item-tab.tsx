@@ -23,7 +23,8 @@ export type FreeItemView = {
   hasReceipt: boolean;
 };
 
-const ACCEPT = "image/jpeg,image/png,image/webp";
+const ACCEPT =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif";
 
 export function FreeItemTab({
   monthKey,
@@ -163,8 +164,9 @@ export function FreeItemTab({
               {file ? file.name : "画像を選択・撮影"}
             </Button>
             <p className="text-xs text-muted-foreground font-ui">
-              JPEG・PNG・WebP、8MB まで
-              {editingId && "。選択しない場合は既存の画像を保持します。"}
+              JPEG・PNG・WebP・HEIC、8MB まで。iPhone
+              で撮った写真（HEIC）はそのまま添付できます
+              {editingId && "。選択しない場合は既存の画像を保持します"}。
             </p>
           </div>
 
