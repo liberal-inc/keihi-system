@@ -117,6 +117,8 @@ http://localhost:3000 を開く。
   - 品物名・金額を自由入力、領収書画像（JPEG / PNG / WebP / **HEIC**、8MB まで）を添付
   - HEIC（iPhone の標準形式）は保存時に JPEG へ自動変換する。
     ブラウザで表示できず PDF にも埋め込めないため（`src/lib/storage.ts`）
+  - スマホの写真は送信前にブラウザ側で長辺 2000px に縮小し（`src/lib/image-client.ts`）、
+    サーバー側でも sharp で同じ上限に揃える
   - 登録済み品目の編集・削除
 - **小物（カテゴリ一覧）タブ**
   - 管理者が設定したカテゴリから品目と数量を選んで申請
@@ -239,6 +241,9 @@ Railway へのデプロイ手順は [DEPLOY.md](./DEPLOY.md) を参照。
 - **画像形式の判定はファイルの中身で行う**：iPhone から HEIC を送ると MIME タイプが
   空や `application/octet-stream` になることがあるため、申告値だけで弾かず
   先頭バイト（`ftyp` ボックスのブランド）でも判定する。
+- **Server Action のリクエスト上限を引き上げている**：既定は 1MB で、スマホの写真
+  （数MB）を添付すると `Body exceeded 1 MB limit` で送信が失敗する。
+  `next.config.ts` で 12MB にしたうえで、クライアント・サーバーの両方で縮小している。
 - **PDF の日本語フォント**：Noto Sans JP を `src/assets/fonts/` に同梱し、pdfkit のサブセット化に任せる。外部フォント API に依存しないため、オフライン環境でも生成できる。
 
 ### 要確認の解釈

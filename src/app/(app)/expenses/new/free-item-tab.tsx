@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FeedbackBanner, type Feedback } from "@/components/ui/feedback";
 import { Input, Label } from "@/components/ui/input";
+import { shrinkImageForUpload } from "@/lib/image-client";
 import { formatYen } from "@/lib/utils";
 import {
   deleteEntryAction,
@@ -41,6 +42,7 @@ export function FreeItemTab({
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -53,12 +55,21 @@ export function FreeItemTab({
 
   function submit() {
     setFeedback(null);
-    const fd = new FormData();
-    fd.set("name", name);
-    fd.set("amount", amount);
-    if (file) fd.set("receipt", file);
 
     startTransition(async () => {
+      const fd = new FormData();
+      fd.set("name", name);
+      fd.set("amount", amount);
+
+      if (file) {
+        // 送信前に縮小する（回線が細い場所での失敗を減らすため）
+        setStatus("画像を準備しています…");
+        const prepared = await shrinkImageForUpload(file);
+        fd.set("receipt", prepared);
+      }
+
+      setStatus(file ? "アップロード中…" : "保存中…");
+
       let res;
       if (editingId) {
         fd.set("id", editingId);
@@ -67,6 +78,8 @@ export function FreeItemTab({
         fd.set("monthKey", monthKey);
         res = await submitFreeItemAction(fd);
       }
+
+      setStatus(null);
 
       if (res.ok) {
         reset();
@@ -173,7 +186,11 @@ export function FreeItemTab({
           <FeedbackBanner feedback={feedback} />
 
           <Button onClick={submit} disabled={pending || !canSubmit}>
-            {pending ? "保存中…" : editingId ? "更新" : "申請に追加"}
+            {pending
+              ? (status ?? "保存中…")
+              : editingId
+                ? "更新"
+                : "申請に追加"}
           </Button>
         </CardContent>
       </Card>

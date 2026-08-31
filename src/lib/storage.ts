@@ -11,6 +11,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import heicConvert from "heic-convert";
+import sharp from "sharp";
 
 /**
  * 領収書画像の保存先。
@@ -136,32 +137,66 @@ export function isSupportedReceipt(bytes: Buffer, mimeType: string): boolean {
   return false;
 }
 
+/** 保存する画像の最大辺（px）。領収書を読むには十分な解像度 */
+const MAX_DIMENSION = 2000;
+
 /**
  * 保存できる形式に整える。
- * HEIC はブラウザで表示できず PDF にも埋め込めないため JPEG に変換する。
+ *
+ * - HEIC はブラウザで表示できず PDF にも埋め込めないため JPEG に変換する
+ * - スマホの写真は数MB・数千pxあるため、長辺 2000px に縮小して JPEG で保存する
+ *   （保存容量と PDF 生成時のメモリを抑えるため。領収書の判読には十分）
  */
 async function normalizeReceipt(
   bytes: Buffer,
   mimeType: string,
 ): Promise<{ bytes: Buffer; contentType: string }> {
-  const declaredHeic = mimeType === "image/heic" || mimeType === "image/heif";
+  let working = bytes;
 
-  if (!declaredHeic && !isHeicBuffer(bytes)) {
-    return { bytes, contentType: mimeType };
+  // 1) HEIC は先に JPEG へ変換する（sharp の標準ビルドは HEIC を読めないため）
+  if (mimeType === "image/heic" || mimeType === "image/heif" || isHeicBuffer(bytes)) {
+    try {
+      const converted = await heicConvert({
+        buffer: new Uint8Array(bytes),
+        format: "JPEG",
+        quality: 0.9,
+      });
+      working = Buffer.from(converted);
+    } catch (e) {
+      console.error("HEIC の変換に失敗しました", e);
+      throw new Error(
+        "この画像を読み込めませんでした。JPEG または PNG で保存し直してお試しください。",
+      );
+    }
   }
 
+  // 2) 大きすぎる画像は縮小する
   try {
-    const converted = await heicConvert({
-      buffer: new Uint8Array(bytes),
-      format: "JPEG",
-      quality: 0.85,
-    });
-    return { bytes: Buffer.from(converted), contentType: "image/jpeg" };
+    const image = sharp(working, { failOn: "none" });
+    const meta = await image.metadata();
+    const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
+
+    if (longest > MAX_DIMENSION) {
+      const resized = await image
+        .rotate() // Exif の向きを反映してから縮小する
+        .resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: "inside" })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      return { bytes: resized, contentType: "image/jpeg" };
+    }
+
+    // 縮小不要でも、HEIC 由来なら JPEG として扱う
+    if (working !== bytes) {
+      return { bytes: working, contentType: "image/jpeg" };
+    }
+    return { bytes, contentType: mimeType };
   } catch (e) {
-    console.error("HEIC の変換に失敗しました", e);
-    throw new Error(
-      "この画像を読み込めませんでした。JPEG または PNG で保存し直してお試しください。",
-    );
+    // 縮小に失敗しても、変換済みのデータが使えるならそのまま保存する
+    console.error("画像の縮小に失敗しました（元データで保存します）", e);
+    return {
+      bytes: working,
+      contentType: working !== bytes ? "image/jpeg" : mimeType,
+    };
   }
 }
 
