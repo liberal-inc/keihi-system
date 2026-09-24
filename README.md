@@ -185,6 +185,15 @@ http://localhost:3000 を開く。
 - アイコンのみ表示への折りたたみ、ドラッグによる幅変更（180〜400px）
 - 状態は localStorage に保存され、次回アクセス時に復元される
 
+## 稼働確認
+
+```
+https://<公開URL>/api/health
+```
+
+DB まで到達できるかを返す。`{"status":"ok","database":"ok"}` なら正常。
+`503` が返る場合は Railway の MySQL 側を確認する。
+
 ## デプロイ
 
 Railway へのデプロイ手順は [DEPLOY.md](./DEPLOY.md) を参照。
@@ -241,6 +250,11 @@ Railway へのデプロイ手順は [DEPLOY.md](./DEPLOY.md) を参照。
 - **画像形式の判定はファイルの中身で行う**：iPhone から HEIC を送ると MIME タイプが
   空や `application/octet-stream` になることがあるため、申告値だけで弾かず
   先頭バイト（`ftyp` ボックスのブランド）でも判定する。
+- **DB 接続はプール設定を明示し、失敗時は作り直す**：DB が再起動すると既存の接続が
+  すべて切れる（Railway は MySQL のイメージを自動更新することがある）。
+  `minDelayValidation` で使い回す前に疎通確認し、`idleTimeout` で古い接続を捨て、
+  それでも失敗したらプールを作り直して 1 度だけやり直す（`src/lib/prisma.ts`）。
+  これが無いと、DB 復旧後もアプリを手動で再起動するまで復旧しない。
 - **Server Action のリクエスト上限を引き上げている**：既定は 1MB で、スマホの写真
   （数MB）を添付すると `Body exceeded 1 MB limit` で送信が失敗する。
   `next.config.ts` で 12MB にしたうえで、クライアント・サーバーの両方で縮小している。

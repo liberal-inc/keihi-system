@@ -220,3 +220,4 @@ cd ~/keihi-system && npx prisma migrate dev --name 変更内容
 | PDF の日本語が四角になる | フォント `src/assets/fonts/NotoSansJP.ttf` が push されているか確認（9.5MB） |
 | DB に繋がらない | `DATABASE_URL` に `${{MySQL.MYSQL_URL}}` が波括弧ごと入っているか確認する。MySQL サービス名が `MySQL` 以外なら、その名前に合わせる |
 | マイグレーションが走らない | Deploy ログに `prisma migrate deploy` の出力が出ているか確認する（`railway.json` の startCommand） |
+| 画面が開かない・ログインが終わらない | まず `https://<公開URL>/api/health` を開く。`503` なら MySQL 側の問題。Railway で MySQL が Online か、直近で再デプロイされていないかを確認する |
