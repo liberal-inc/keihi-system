@@ -97,22 +97,10 @@ export async function assignMemberAction(
 ): Promise<ActionResult> {
   await requireRole("admin", "owner");
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { managedDepartment: { select: { id: true, name: true } } },
-  });
+  const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { ok: false, error: "社員が見つかりません" };
 
-  // 担当部署のマネージャーが別部署に移ると管理関係が壊れるため、先に外させる
-  if (
-    user.managedDepartment &&
-    user.managedDepartment.id !== departmentId
-  ) {
-    return {
-      ok: false,
-      error: `${user.name} さんは「${user.managedDepartment.name}」のマネージャーです。先にマネージャー設定を解除してください`,
-    };
-  }
+  // 所属と担当部署は独立しているため、マネージャーのまま異動できる
 
   await prisma.user.update({
     where: { id: userId },
@@ -152,13 +140,8 @@ export async function setManagerAction(
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { ok: false, error: "社員が見つかりません" };
 
-  // マネージャーは担当部署の日報を見るため、その部署に所属している必要がある
-  if (user.departmentId !== departmentId) {
-    return {
-      ok: false,
-      error: `${user.name} さんは「${department.name}」に所属していません。先に異動させてください`,
-    };
-  }
+  // 担当部署に所属していなくてもマネージャーにできる。
+  // （別部署の社員が店舗などを兼任で見るケースがあるため）
 
   // 1人が複数部署のマネージャーを兼任することは想定しない（スキーマ上も1対1）
   const alreadyManaging = await prisma.department.findFirst({

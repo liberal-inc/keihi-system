@@ -38,6 +38,12 @@ export default async function DepartmentsPage() {
         description="部署の追加・編集・削除、メンバーの異動、マネージャーの設定ができます。"
       />
       <DepartmentManager
+        allUsers={users.map((u) => ({
+          id: u.id,
+          name: u.name,
+          employeeNo: u.employeeNo,
+          role: u.role,
+        }))}
         departments={departments.map((d) => ({
           id: d.id,
           name: d.name,

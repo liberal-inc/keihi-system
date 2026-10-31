@@ -40,12 +40,14 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/expenses/new", label: "経費申請", icon: Receipt },
       { href: "/expenses", label: "申請履歴", icon: FileStack },
       { href: "/reports", label: "日報一覧", icon: BookText },
-      // 「日報を書く」は社員のみ表示（仕様書より）
+      // 日報を書くのは社員とマネージャー。
+      // （仕様書では「社員のみ」だったが、部署を見るマネージャー自身も
+      //   日報を書く運用のため manager を追加した）
       {
         href: "/reports/new",
         label: "日報を書く",
         icon: PenLine,
-        roles: ["user"],
+        roles: ["user", "manager"],
       },
     ],
   },

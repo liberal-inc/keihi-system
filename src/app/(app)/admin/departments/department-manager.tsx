@@ -46,9 +46,12 @@ const NO_MANAGER = "__none__";
 export function DepartmentManager({
   departments,
   unassigned,
+  allUsers,
 }: {
   departments: DepartmentView[];
   unassigned: Member[];
+  /** マネージャー候補。所属部署に関わらず全社員から選べる */
+  allUsers: Member[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -201,16 +204,17 @@ export function DepartmentManager({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_MANAGER}>未設定</SelectItem>
-                    {d.members.map((m) => (
+                    {allUsers.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.name}
+                        {!d.members.some((x) => x.id === m.id) && "（他部署）"}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <span className="text-xs text-muted-foreground font-ui">
-                この部署に所属する社員から選べます
+                他部署の社員も担当者に設定できます
               </span>
             </div>
 
@@ -329,7 +333,9 @@ export function DepartmentManager({
       )}
 
       <p className="text-xs text-muted-foreground font-ui">
-        マネージャーは担当部署の社員の日報を閲覧・コメントできます。
+        マネージャーは担当部署の社員の日報を閲覧・コメントできます（自分がその部署に
+        所属している必要はありません）。日報を閲覧・コメントするには、その社員の
+        ロールを「マネージャー」にしたうえで担当部署を設定してください。
         部署を削除しても社員は削除されず、「部署なし」に移ります。
       </p>
     </div>
